@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Orbitron:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script
+      crossorigin
+      src="https://unpkg.com/react@18/umd/react.production.min.js"
+    ></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
+    ></script>
+    <!-- Babel para JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide-react@0.469.0/dist/umd/lucide-react.min.js"></script>
+
+    <style>
+      :root {
+        --background: 222.2 84% 4.9%;
+        --foreground: 210 40% 98%;
+        --primary: 180 100% 50%; /* Cyan Neon */
+        --primary-foreground: 222.2 47.4% 11.2%;
+        --muted: 217.2 32.6% 17.5%;
+        --muted-foreground: 215 20.2% 65.1%;
+        --border: 217.2 32.6% 17.5%;
+        --input: 217.2 32.6% 17.5%;
+        --destructive: 0 62.8% 30.6%;
+      }
+
+      body {
+        background-color: hsl(var(--background));
+        color: hsl(var(--foreground));
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+
+      .glass {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .glass-strong {
+        background: rgba(13, 17, 23, 0.8);
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .neon-border {
+        border: 1px solid hsl(var(--primary));
+        box-shadow: 0 0 5px hsl(var(--primary) / 0.5);
+      }
+
+      .neon-text {
+        color: hsl(var(--primary));
+        text-shadow: 0 0 5px hsl(var(--primary) / 0.5);
+      }
+
+      .neon-glow {
+        box-shadow: 0 0 15px hsl(var(--primary) / 0.5);
+      }
+
+      .gradient-primary {
+        background: linear-gradient(135deg, hsl(var(--primary)), #0099ff);
+      }
+
+      .scan-line {
+        position: relative;
+      }
+      .scan-line::before {
+        content: " ";
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background:
+          linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+          linear-gradient(
+            90deg,
+            rgba(255, 0, 0, 0.06),
+            rgba(0, 255, 0, 0.02),
+            rgba(0, 0, 255, 0.06)
+          );
+        z-index: 2;
+        background-size:
+          100% 2px,
+          3px 100%;
+        pointer-events: none;
+      }
+
+      /* Toast Styles */
+      .toast-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .toast {
+        padding: 12px 20px;
+        border-radius: 8px;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        color: white;
+        animation: slideIn 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 200px;
+        font-size: 14px;
+      }
+      .toast.success {
+        border-color: #10b981;
+        color: #10b981;
+      }
+      .toast.error {
+        border-color: #ef4444;
+        color: #ef4444;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: "hsl(var(--background))",
+              foreground: "hsl(var(--foreground))",
+              primary: "hsl(var(--primary))",
+              "primary-foreground": "hsl(var(--primary-foreground))",
+              muted: "hsl(var(--muted))",
+              "muted-foreground": "hsl(var(--muted-foreground))",
+              border: "hsl(var(--border))",
+              input: "hsl(var(--input))",
+              destructive: "hsl(var(--destructive))",
+            },
+            fontFamily: {
+              display: ['"Orbitron"', "sans-serif"],
+              body: ['"Inter"', "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React;
+      const { createClient } = supabase;
+
+      // Componente de Icono seguro para evitar errores si la librería falla
+      const Icon = ({ name, ...props }) => {
+        const Icons = window.lucide || window.lucideReact || {};
+        const Component = Icons[name];
+        if (!Component) {
+          return (
+            <span className="text-xs font-mono text-muted-foreground">
+              [{name}]
+            </span>
+          );
+        }
+        return <Component {...props} />;
+      };
+
+      // --- CONFIGURACIÓN SUPABASE ---
+      // REEMPLAZA ESTO CON TUS DATOS REALES
+      const SUPABASE_URL = "https://TU_PROYECTO.supabase.co"; // <--- PON TU URL AQUÍ
+      const SUPABASE_ANON_KEY = "TU_ANON_KEY_PUBLICA"; // <--- PON TU KEY AQUÍ
+
+      const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      // --- TOAST SYSTEM (Reemplazo de Sonner) ---
+      const ToastContext = React.createContext();
+      const ToastProvider = ({ children }) => {
+        const [toasts, setToasts] = useState([]);
+        const addToast = (message, type = "default") => {
+          const id = Date.now();
+          setToasts((prev) => [...prev, { id, message, type }]);
+          setTimeout(
+            () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+            3000,
+          );
+        };
+        return (
+          <ToastContext.Provider value={{ addToast }}>
+            {children}
+            <div className="toast-container">
+              {toasts.map((t) => (
+                <div key={t.id} className={`toast ${t.type}`}>
+                  {t.message}
+                </div>
+              ))}
+            </div>
+          </ToastContext.Provider>
+        );
+      };
+      const useToast = () => React.useContext(ToastContext);
+
+      // --- ADMIN COMPONENT ---
+      const ADMIN_EMAIL = "admin@productodigital.com";
+      const ADMIN_PASSWORD = "Daewocielo1.";
+
+      const Admin = () => {
+        const { addToast } = useToast();
+        const toast = {
+          success: (msg) => addToast(msg, "success"),
+          error: (msg) => addToast(msg, "error"),
+        };
+
+        const [authenticated, setAuthenticated] = useState(false);
+        const [password, setPassword] = useState("");
+        const [loading, setLoading] = useState(false);
+        const [products, setProducts] = useState([]);
+        const [showForm, setShowForm] = useState(false);
+        const [editingId, setEditingId] = useState(null);
+        const [form, setForm] = useState({
+          name: "",
+          description: "",
+          price: "",
+          category: "",
+        });
+        const [imageFile, setImageFile] = useState(null);
+        const [imagePreview, setImagePreview] = useState(null);
+        const fileInputRef = useRef(null);
+
+        useEffect(() => {
+          supabaseClient.auth.onAuthStateChange((_, session) => {
+            setAuthenticated(!!session);
+            if (session) fetchProducts();
+          });
+          supabaseClient.auth.getSession().then(({ data: { session } }) => {
+            setAuthenticated(!!session);
+            if (session) fetchProducts();
+          });
+        }, []);
+
+        // Limpieza de memoria para previsualización de imágenes
+        useEffect(() => {
+          return () => {
+            if (imagePreview && imagePreview.startsWith("blob:"))
+              URL.revokeObjectURL(imagePreview);
+          };
+        }, [imagePreview]);
+
+        const fetchProducts = async () => {
+          const { data } = await supabaseClient
+            .from("products")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (data) setProducts(data);
+        };
+
+        const handleLogin = async (e) => {
+          e.preventDefault();
+          setLoading(true);
+          if (password !== ADMIN_PASSWORD) {
+            toast.error("Clave incorrecta");
+            setLoading(false);
+            return;
+          }
+          const { error } = await supabaseClient.auth.signInWithPassword({
+            email: ADMIN_EMAIL,
+            password: ADMIN_PASSWORD,
+          });
+          if (error) {
+            if (
+              error.message.includes("Invalid login") ||
+              error.message.includes("credentials")
+            ) {
+              const { error: signUpError } = await supabaseClient.auth.signUp({
+                email: ADMIN_EMAIL,
+                password: ADMIN_PASSWORD,
+              });
+              if (signUpError) toast.error("Error: " + signUpError.message);
+              else
+                toast.success(
+                  "Cuenta creada. Verifica si se requiere confirmación.",
+                );
+            } else {
+              toast.error("Error de acceso");
+            }
+          }
+          setLoading(false);
+        };
+
+        const handleLogout = async () => {
+          await supabaseClient.auth.signOut();
+          setAuthenticated(false);
+        };
+
+        const handleImageSelect = (e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            setImageFile(file);
+            setImagePreview(URL.createObjectURL(file));
+          }
+        };
+
+        const uploadImage = async (file) => {
+          const ext = file.name.split(".").pop();
+          const path = `${Date.now()}.${ext}`;
+          const { error } = await supabaseClient.storage
+            .from("product-images")
+            .upload(path, file);
+          if (error) {
+            toast.error("Error subiendo imagen");
+            return null;
+          }
+          const {
+            data: { publicUrl },
+          } = supabaseClient.storage.from("product-images").getPublicUrl(path);
+          return publicUrl;
+        };
+
+        const handleSave = async (e) => {
+          e.preventDefault();
+          if (!form.name || !form.price) {
+            toast.error("Nombre y precio obligatorios");
+            return;
+          }
+          setLoading(true);
+          let image_url = null;
+          if (imageFile) image_url = await uploadImage(imageFile);
+
+          const productData = {
+            name: form.name,
+            description: form.description || null,
+            price: parseFloat(form.price) || 0,
+            category: form.category || null,
+            ...(image_url ? { image_url } : {}),
+          };
+
+          if (editingId) {
+            const { error } = await supabaseClient
+              .from("products")
+              .update(productData)
+              .eq("id", editingId);
+            if (error) toast.error("Error actualizando");
+            else toast.success("Producto actualizado");
+          } else {
+            const { error } = await supabaseClient
+              .from("products")
+              .insert([{ ...productData, available: true }]);
+            if (error) toast.error("Error creando");
+            else toast.success("Producto creado");
+          }
+          resetForm();
+          fetchProducts();
+          setLoading(false);
+        };
+
+        const handleEdit = (p) => {
+          setForm({
+            name: p.name,
+            description: p.description || "",
+            price: p.price.toString(),
+            category: p.category || "",
+          });
+          setImagePreview(p.image_url);
+          setEditingId(p.id);
+          setShowForm(true);
+        };
+
+        const handleDelete = async (id) => {
+          if (!confirm("¿Eliminar?")) return;
+          await supabaseClient.from("products").delete().eq("id", id);
+          toast.success("Eliminado");
+          fetchProducts();
+        };
+
+        const handleToggle = async (id, available) => {
+          await supabaseClient
+            .from("products")
+            .update({ available: !available })
+            .eq("id", id);
+          fetchProducts();
+        };
+
+        const resetForm = () => {
+          setForm({ name: "", description: "", price: "", category: "" });
+          setImageFile(null);
+          setImagePreview(null);
+          setEditingId(null);
+          setShowForm(false);
+        };
+
+        if (!authenticated) {
+          return (
+            <div className="min-h-screen bg-background flex items-center justify-center px-4 scan-line relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
+              <form
+                onSubmit={handleLogin}
+                className="glass neon-border rounded-2xl p-8 w-full max-w-sm space-y-6 relative z-10"
+              >
+                <div className="text-center">
+                  <div className="glass rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 neon-glow">
+                    <Icon name="Lock" className="h-8 w-8 text-primary" />
+                  </div>
+                  <h1 className="font-display text-xl font-bold neon-text tracking-wider">
+                    ADMIN
+                  </h1>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    Ingresa tu clave de acceso
+                  </p>
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Clave de acceso"
+                  className="w-full bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-body"
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full gradient-primary text-primary-foreground font-display font-bold py-3 rounded-lg tracking-wider transition-all hover:scale-[1.02] disabled:opacity-50 text-sm"
+                >
+                  {loading ? "VERIFICANDO..." : "ACCEDER"}
+                </button>
+              </form>
+            </div>
+          );
+        }
+
+        return (
+          <div className="min-h-screen bg-background scan-line">
+            <header className="glass-strong sticky top-0 z-50 border-b border-border">
+              <div className="container mx-auto flex items-center justify-between py-3 px-4">
+                <h1 className="font-display text-lg font-bold neon-text tracking-wider">
+                  PANEL ADMIN
+                </h1>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      resetForm();
+                      setShowForm(true);
+                    }}
+                    className="gradient-primary text-primary-foreground rounded-lg px-3 py-2 text-sm font-semibold flex items-center gap-1.5"
+                  >
+                    <Icon name="Plus" className="h-4 w-4" /> Nuevo
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="glass neon-border rounded-lg p-2 hover:neon-glow transition-all"
+                  >
+                    <Icon name="LogOut" className="h-4 w-4 text-primary" />
+                  </button>
+                </div>
+              </div>
+            </header>
+
+            <main className="container mx-auto px-4 py-6">
+              {showForm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                  <div
+                    className="absolute inset-0 bg-background/60 backdrop-blur-sm"
+                    onClick={resetForm}
+                  />
+                  <form
+                    onSubmit={handleSave}
+                    className="relative glass-strong neon-border rounded-2xl p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto"
+                  >
+                    <div className="flex justify-between items-center">
+                      <h2 className="font-display text-sm font-bold tracking-wider neon-text">
+                        {editingId ? "EDITAR" : "NUEVO"} PRODUCTO
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={resetForm}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <Icon name="X" className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/40 transition-colors"
+                    >
+                      {imagePreview ? (
+                        <img
+                          src={imagePreview}
+                          alt="Preview"
+                          className="w-full h-40 object-cover rounded-lg"
+                        />
+                      ) : (
+                        <div className="space-y-2">
+                          <Icon
+                            name="Upload"
+                            className="h-8 w-8 text-muted-foreground mx-auto"
+                          />
+                          <p className="text-muted-foreground text-sm">
+                            Toca para subir foto
+                          </p>
+                        </div>
+                      )}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageSelect}
+                        className="hidden"
+                      />
+                    </div>
+
+                    <input
+                      value={form.name}
+                      onChange={(e) =>
+                        setForm({ ...form, name: e.target.value })
+                      }
+                      placeholder="Nombre del producto"
+                      className="w-full bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-body"
+                      required
+                    />
+                    <textarea
+                      value={form.description}
+                      onChange={(e) =>
+                        setForm({ ...form, description: e.target.value })
+                      }
+                      placeholder="Descripción"
+                      rows={3}
+                      className="w-full bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-body resize-none"
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <input
+                        value={form.price}
+                        onChange={(e) =>
+                          setForm({ ...form, price: e.target.value })
+                        }
+                        placeholder="Precio"
+                        type="number"
+                        step="0.01"
+                        className="w-full bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-body"
+                        required
+                      />
+                      <input
+                        value={form.category}
+                        onChange={(e) =>
+                          setForm({ ...form, category: e.target.value })
+                        }
+                        placeholder="Categoría"
+                        className="w-full bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-body"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full gradient-primary text-primary-foreground font-display font-bold py-3 rounded-lg tracking-wider flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                    >
+                      <Icon name="Save" className="h-4 w-4" />
+                      {loading ? "GUARDANDO..." : "GUARDAR"}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {products.length === 0 ? (
+                  <div className="text-center py-20">
+                    <p className="text-muted-foreground font-body text-lg">
+                      No hay productos. Crea el primero.
+                    </p>
+                  </div>
+                ) : (
+                  products.map((p) => (
+                    <div
+                      key={p.id}
+                      className="glass neon-border rounded-xl p-3 flex gap-3 items-center"
+                    >
+                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                        {p.image_url ? (
+                          <img
+                            src={p.image_url}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs font-display">
+                            N/A
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-display text-xs font-semibold truncate">
+                          {p.name}
+                        </h3>
+                        <p className="neon-text font-display text-sm font-bold">
+                          ${p.price}
+                        </p>
+                        <span
+                          className={`text-xs ${p.available ? "text-green-400" : "text-destructive"}`}
+                        >
+                          {p.available ? "Activo" : "Inactivo"}
+                        </span>
+                      </div>
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => handleToggle(p.id, p.available)}
+                          className="glass rounded-lg p-2 hover:neon-glow transition-all"
+                        >
+                          <span className="text-xs">
+                            {p.available ? "🟢" : "🔴"}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => handleEdit(p)}
+                          className="glass rounded-lg p-2 hover:neon-glow transition-all"
+                        >
+                          <Icon
+                            name="Edit2"
+                            className="h-3.5 w-3.5 text-primary"
+                          />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(p.id)}
+                          className="glass rounded-lg p-2 hover:bg-destructive/20 transition-all"
+                        >
+                          <Icon
+                            name="Trash2"
+                            className="h-3.5 w-3.5 text-destructive"
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </main>
+          </div>
+        );
+      };
+
+      const App = () => (
+        <ToastProvider>
+          <Admin />
+        </ToastProvider>
+      );
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
