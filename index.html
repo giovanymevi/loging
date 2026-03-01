@@ -197,8 +197,9 @@
 
       // --- CONFIGURACIÓN SUPABASE ---
       // REEMPLAZA ESTO CON TUS DATOS REALES
-      const SUPABASE_URL = "https://TU_PROYECTO.supabase.co"; // <--- PON TU URL AQUÍ
-      const SUPABASE_ANON_KEY = "TU_ANON_KEY_PUBLICA"; // <--- PON TU KEY AQUÍ
+      const SUPABASE_URL = "https://cwrltqviszanzdmgpriu.supabase.co"; // <--- PON TU URL AQUÍ
+      const SUPABASE_ANON_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3cmx0cXZpc3phbnpkbWdwcml1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjk3NjEsImV4cCI6MjA4Nzk0NTc2MX0.yKFsFQ3UFpeoPSkObf_OyWivyzgB7XrPhcsa4VbShFE"; // <--- PON TU KEY AQUÍ
 
       const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -230,10 +231,8 @@
       const useToast = () => React.useContext(ToastContext);
 
       // --- ADMIN COMPONENT ---
-      const ADMIN_EMAIL = "admin@productodigital.com";
-      const ADMIN_PASSWORD = "Daewocielo1.";
-
       const Admin = () => {
+        const WHATSAPP_NUMBER = "584247423318"; // <--- PON TU NUMERO DE WHATSAPP AQUI (con código de país)
         const { addToast } = useToast();
         const toast = {
           success: (msg) => addToast(msg, "success"),
@@ -241,10 +240,14 @@
         };
 
         const [authenticated, setAuthenticated] = useState(false);
+        const [email, setEmail] = useState("");
         const [password, setPassword] = useState("");
         const [loading, setLoading] = useState(false);
         const [products, setProducts] = useState([]);
+        const [cart, setCart] = useState([]);
         const [showForm, setShowForm] = useState(false);
+        const [showCart, setShowCart] = useState(false);
+        const [isCheckingOut, setIsCheckingOut] = useState(false);
         const [editingId, setEditingId] = useState(null);
         const [form, setForm] = useState({
           name: "",
@@ -257,13 +260,14 @@
         const fileInputRef = useRef(null);
 
         useEffect(() => {
+          fetchProducts(); // Cargar productos siempre (público)
+
           supabaseClient.auth.onAuthStateChange((_, session) => {
             setAuthenticated(!!session);
-            if (session) fetchProducts();
+            fetchProducts();
           });
           supabaseClient.auth.getSession().then(({ data: { session } }) => {
             setAuthenticated(!!session);
-            if (session) fetchProducts();
           });
         }, []);
 
@@ -286,31 +290,57 @@
         const handleLogin = async (e) => {
           e.preventDefault();
           setLoading(true);
-          if (password !== ADMIN_PASSWORD) {
-            toast.error("Clave incorrecta");
-            setLoading(false);
-            return;
-          }
-          const { error } = await supabaseClient.auth.signInWithPassword({
-            email: ADMIN_EMAIL,
-            password: ADMIN_PASSWORD,
+
+          const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email,
+            password,
           });
+
           if (error) {
+            // Si falla el login, intentamos crear el usuario automáticamente
             if (
               error.message.includes("Invalid login") ||
               error.message.includes("credentials")
             ) {
-              const { error: signUpError } = await supabaseClient.auth.signUp({
-                email: ADMIN_EMAIL,
-                password: ADMIN_PASSWORD,
-              });
-              if (signUpError) toast.error("Error: " + signUpError.message);
-              else
+              const { data: signUpData, error: signUpError } =
+                await supabaseClient.auth.signUp({
+                  email,
+                  password,
+                });
+
+              if (signUpError) {
+                if (
+                  signUpError.message.includes("not allowed") ||
+                  signUpError.message.includes("disabled")
+                ) {
+                  toast.error("⚠️ Error: El registro está desactivado.");
+                  setTimeout(
+                    () =>
+                      toast.error(
+                        "Ve a Supabase > Auth > Providers > Email y activa 'Enable Email Signup'",
+                      ),
+                    1500,
+                  );
+                } else {
+                  toast.error("Error creando usuario: " + signUpError.message);
+                }
+              } else if (signUpData.session) {
+                toast.success("¡Acceso concedido! (Usuario creado)");
+              } else {
                 toast.success(
-                  "Cuenta creada. Verifica si se requiere confirmación.",
+                  "Usuario creado. Si no entras, desactiva 'Confirm Email' en Supabase.",
                 );
+              }
+            } else if (error.message.includes("Email not confirmed")) {
+              toast.error(
+                "⚠️ Email no confirmado. Ve a Supabase y desactiva 'Confirm Email'.",
+              );
+            } else if (error.message.includes("disabled")) {
+              toast.error(
+                "⚠️ Error: Activa 'Enable Email Signup' en Supabase.",
+              );
             } else {
-              toast.error("Error de acceso");
+              toast.error("Error de conexión: " + error.message);
             }
           }
           setLoading(false);
@@ -417,74 +447,219 @@
           setShowForm(false);
         };
 
-        if (!authenticated) {
-          return (
-            <div className="min-h-screen bg-background flex items-center justify-center px-4 scan-line relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
-              <form
-                onSubmit={handleLogin}
-                className="glass neon-border rounded-2xl p-8 w-full max-w-sm space-y-6 relative z-10"
-              >
-                <div className="text-center">
-                  <div className="glass rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 neon-glow">
-                    <Icon name="Lock" className="h-8 w-8 text-primary" />
-                  </div>
-                  <h1 className="font-display text-xl font-bold neon-text tracking-wider">
-                    ADMIN
-                  </h1>
-                  <p className="text-muted-foreground text-sm mt-1">
-                    Ingresa tu clave de acceso
-                  </p>
-                </div>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Clave de acceso"
-                  className="w-full bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-body"
-                  required
-                  minLength={6}
-                />
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full gradient-primary text-primary-foreground font-display font-bold py-3 rounded-lg tracking-wider transition-all hover:scale-[1.02] disabled:opacity-50 text-sm"
-                >
-                  {loading ? "VERIFICANDO..." : "ACCEDER"}
-                </button>
-              </form>
-            </div>
-          );
-        }
+        // --- LÓGICA DEL CARRITO ---
+        const addToCart = (product) => {
+          setCart([...cart, product]);
+          toast.success("Agregado al carrito");
+        };
+
+        const removeFromCart = (indexToRemove) => {
+          setCart(cart.filter((_, index) => index !== indexToRemove));
+        };
+
+        const cartTotal = cart.reduce((sum, item) => sum + item.price, 0);
+
+        const handleCheckout = () => {
+          if (cart.length === 0) return;
+          setIsCheckingOut(true);
+
+          const finalizeCheckout = (locationUrl = "") => {
+            let message = "Hola! Quiero realizar el siguiente pedido:%0A%0A";
+            cart.forEach((item) => {
+              message += `- ${item.name} ($${item.price})%0A`;
+            });
+            message += `%0ATotal: $${cartTotal}`;
+
+            if (locationUrl) {
+              message += `%0A%0A📍 Ubicación GPS:%0A${locationUrl}`;
+            }
+
+            window.open(
+              `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`,
+              "_blank",
+            );
+            setIsCheckingOut(false);
+            setShowCart(false);
+          };
+
+          if ("geolocation" in navigator) {
+            toast.success("Obteniendo ubicación GPS...");
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                const { latitude, longitude } = position.coords;
+                const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                finalizeCheckout(mapsUrl);
+              },
+              (error) => {
+                toast.error("No se pudo obtener ubicación. Enviando sin GPS.");
+                finalizeCheckout();
+              },
+              { enableHighAccuracy: true, timeout: 10000 }
+            );
+          } else {
+            finalizeCheckout();
+          }
+        };
+
+        // Formateador de moneda
+        const formatPrice = (price) => {
+          return new Intl.NumberFormat("es-CO", {
+            style: "currency",
+            currency: "COP",
+          }).format(price);
+        };
 
         return (
           <div className="min-h-screen bg-background scan-line">
-            <header className="glass-strong sticky top-0 z-50 border-b border-border">
-              <div className="container mx-auto flex items-center justify-between py-3 px-4">
-                <h1 className="font-display text-lg font-bold neon-text tracking-wider">
-                  PANEL ADMIN
-                </h1>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      resetForm();
-                      setShowForm(true);
-                    }}
-                    className="gradient-primary text-primary-foreground rounded-lg px-3 py-2 text-sm font-semibold flex items-center gap-1.5"
+            {!authenticated ? (
+              <section className="py-12 px-4 border-b border-border/50 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
+                <div className="container mx-auto max-w-sm relative z-10">
+                  <form
+                    onSubmit={handleLogin}
+                    className="glass neon-border rounded-2xl p-8 w-full space-y-6"
                   >
-                    <Icon name="Plus" className="h-4 w-4" /> Nuevo
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="glass neon-border rounded-lg p-2 hover:neon-glow transition-all"
-                  >
-                    <Icon name="LogOut" className="h-4 w-4 text-primary" />
-                  </button>
+                    <div className="text-center">
+                      <div className="glass rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 neon-glow">
+                        <Icon name="Lock" className="h-8 w-8 text-primary" />
+                      </div>
+                      <h1 className="font-display text-xl font-bold neon-text tracking-wider">
+                        ADMIN
+                      </h1>
+                      <p className="text-muted-foreground text-sm mt-1">
+                        Ingresa tus credenciales
+                      </p>
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Correo electrónico"
+                      className="w-full bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-body"
+                      required
+                    />
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Contraseña"
+                      className="w-full bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-body"
+                      required
+                      minLength={6}
+                    />
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full gradient-primary text-primary-foreground font-display font-bold py-3 rounded-lg tracking-wider transition-all hover:scale-[1.02] disabled:opacity-50 text-sm"
+                    >
+                      {loading ? "VERIFICANDO..." : "ACCEDER"}
+                    </button>
+                  </form>
                 </div>
-              </div>
-            </header>
+              </section>
+            ) : (
+              <header className="glass-strong sticky top-0 z-50 border-b border-border">
+                <div className="container mx-auto flex items-center justify-between py-3 px-4">
+                  <h1 className="font-display text-lg font-bold neon-text tracking-wider">
+                    PANEL ADMIN
+                  </h1>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        resetForm();
+                        setShowForm(true);
+                      }}
+                      className="gradient-primary text-primary-foreground rounded-lg px-3 py-2 text-sm font-semibold flex items-center gap-1.5"
+                    >
+                      <Icon name="Plus" className="h-4 w-4" /> Nuevo
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="glass neon-border rounded-lg p-2 hover:neon-glow transition-all"
+                    >
+                      <Icon name="LogOut" className="h-4 w-4 text-primary" />
+                    </button>
+                  </div>
+                </div>
+              </header>
+            )}
 
             <main className="container mx-auto px-4 py-6">
+              {/* --- MODAL DEL CARRITO --- */}
+              {showCart && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                  <div
+                    className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+                    onClick={() => setShowCart(false)}
+                  />
+                  <div className="relative glass-strong neon-border rounded-2xl p-6 w-full max-w-md max-h-[80vh] flex flex-col">
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="font-display text-xl font-bold neon-text">
+                        TU CARRITO
+                      </h2>
+                      <button
+                        onClick={() => setShowCart(false)}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <Icon name="X" className="h-6 w-6" />
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+                      {cart.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">
+                          El carrito está vacío
+                        </p>
+                      ) : (
+                        cart.map((item, index) => (
+                          <div
+                            key={index}
+                            className="glass rounded-lg p-3 flex justify-between items-center"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded bg-muted overflow-hidden">
+                                {item.image_url && (
+                                  <img
+                                    src={item.image_url}
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-bold text-sm">{item.name}</p>
+                                <p className="text-xs text-primary">
+                                  ${item.price}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeFromCart(index)}
+                              className="text-destructive hover:bg-destructive/10 p-1 rounded"
+                            >
+                              <Icon name="Trash2" className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="border-t border-border pt-4 space-y-4">
+                      <div className="flex justify-between items-center font-display font-bold text-lg">
+                        <span>Total:</span>
+                        <span className="neon-text">${cartTotal}</span>
+                      </div>
+                      <button
+                        onClick={handleCheckout}
+                        disabled={cart.length === 0 || isCheckingOut}
+                        className="w-full gradient-primary text-primary-foreground font-display font-bold py-3 rounded-lg tracking-wider disabled:opacity-50 hover:scale-[1.02] transition-transform"
+                      >
+                        {isCheckingOut ? "OBTENIENDO UBICACIÓN..." : "COMPRAR POR WHATSAPP"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {showForm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
                   <div
@@ -589,9 +764,10 @@
                 </div>
               )}
 
-              <div className="space-y-3">
+              {/* --- GRID DE PRODUCTOS --- */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
                 {products.length === 0 ? (
-                  <div className="text-center py-20">
+                  <div className="text-center py-20 col-span-full">
                     <p className="text-muted-foreground font-body text-lg">
                       No hay productos. Crea el primero.
                     </p>
@@ -600,66 +776,102 @@
                   products.map((p) => (
                     <div
                       key={p.id}
-                      className="glass neon-border rounded-xl p-3 flex gap-3 items-center"
+                      className="glass neon-border rounded-2xl overflow-hidden flex flex-col group hover:neon-glow transition-all duration-300"
                     >
-                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                      {/* Imagen Grande */}
+                      <div className="relative w-full h-64 bg-muted overflow-hidden">
                         {p.image_url ? (
                           <img
                             src={p.image_url}
                             alt={p.name}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs font-display">
-                            N/A
+                            SIN IMAGEN
+                          </div>
+                        )}
+
+                        {/* Badge de estado (solo admin) */}
+                        {authenticated && (
+                          <div className="absolute top-2 right-2 flex gap-1">
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-bold glass-strong ${p.available ? "text-green-400" : "text-destructive"}`}
+                            >
+                              {p.available ? "ACTIVO" : "INACTIVO"}
+                            </span>
                           </div>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-display text-xs font-semibold truncate">
+
+                      {/* Info del Producto */}
+                      <div className="p-5 flex flex-col flex-1">
+                        <h3 className="font-display text-lg font-bold truncate mb-1">
                           {p.name}
                         </h3>
-                        <p className="neon-text font-display text-sm font-bold">
-                          ${p.price}
+                        <p className="text-muted-foreground text-sm line-clamp-2 mb-4 flex-1">
+                          {p.description}
                         </p>
-                        <span
-                          className={`text-xs ${p.available ? "text-green-400" : "text-destructive"}`}
-                        >
-                          {p.available ? "Activo" : "Inactivo"}
-                        </span>
+
+                        <div className="flex items-center justify-between mt-auto">
+                          <p className="neon-text font-display text-xl font-bold">
+                            ${p.price}
+                          </p>
+                          <button
+                            onClick={() => addToCart(p)}
+                            className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/50 rounded-full p-2 transition-colors"
+                          >
+                            <Icon name="ShoppingCart" className="h-5 w-5" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-1.5 flex-shrink-0">
-                        <button
-                          onClick={() => handleToggle(p.id, p.available)}
-                          className="glass rounded-lg p-2 hover:neon-glow transition-all"
-                        >
-                          <span className="text-xs">
-                            {p.available ? "🟢" : "🔴"}
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => handleEdit(p)}
-                          className="glass rounded-lg p-2 hover:neon-glow transition-all"
-                        >
-                          <Icon
-                            name="Edit2"
-                            className="h-3.5 w-3.5 text-primary"
-                          />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(p.id)}
-                          className="glass rounded-lg p-2 hover:bg-destructive/20 transition-all"
-                        >
-                          <Icon
-                            name="Trash2"
-                            className="h-3.5 w-3.5 text-destructive"
-                          />
-                        </button>
-                      </div>
+
+                      {/* Controles de Admin */}
+                      {authenticated && (
+                        <div className="flex gap-2 p-3 border-t border-white/10 bg-black/20 justify-end">
+                          <button
+                            onClick={() => handleToggle(p.id, p.available)}
+                            className="text-muted-foreground hover:text-foreground p-1"
+                            title="Alternar disponibilidad"
+                          >
+                            <Icon
+                              name={p.available ? "Eye" : "EyeOff"}
+                              className="h-4 w-4"
+                            />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(p)}
+                            className="text-primary hover:text-primary/80 p-1"
+                          >
+                            <Icon name="Edit2" className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="text-destructive hover:text-destructive/80 p-1"
+                          >
+                            <Icon name="Trash2" className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
               </div>
+
+              {/* --- BOTÓN FLOTANTE DEL CARRITO --- */}
+              <button
+                onClick={() => setShowCart(true)}
+                className="fixed bottom-6 right-6 z-40 gradient-primary text-primary-foreground w-16 h-16 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform neon-glow"
+              >
+                <div className="relative">
+                  <Icon name="ShoppingCart" className="h-8 w-8" />
+                  {cart.length > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-destructive text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full border border-background">
+                      {cart.length}
+                    </span>
+                  )}
+                </div>
+              </button>
             </main>
           </div>
         );
