@@ -258,6 +258,7 @@
         const [imageFile, setImageFile] = useState(null);
         const [imagePreview, setImagePreview] = useState(null);
         const fileInputRef = useRef(null);
+        const cameraInputRef = useRef(null);
 
         useEffect(() => {
           // Intenta obtener la sesión al cargar para verificar la conexión
@@ -701,30 +702,58 @@
                     </div>
 
                     <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/40 transition-colors"
+                      className="border-2 border-dashed border-border rounded-xl p-6 text-center transition-colors"
                     >
                       {imagePreview ? (
-                        <img
-                          src={imagePreview}
-                          alt="Preview"
-                          className="w-full h-40 object-cover rounded-lg"
-                        />
-                      ) : (
-                        <div className="space-y-2">
-                          <Icon
-                            name="Upload"
-                            className="h-8 w-8 text-muted-foreground mx-auto"
+                        <div>
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
+                            className="w-full h-40 object-cover rounded-lg"
                           />
-                          <p className="text-muted-foreground text-sm">
-                            Toca para subir foto
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setImageFile(null);
+                              setImagePreview(null);
+                              if(fileInputRef.current) fileInputRef.current.value = "";
+                              if(cameraInputRef.current) cameraInputRef.current.value = "";
+                            }}
+                            className="text-destructive text-sm mt-2 hover:underline"
+                          >
+                            Quitar imagen
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                            <Icon
+                              name="Upload"
+                              className="h-8 w-8 text-muted-foreground mx-auto hover:text-primary transition-colors"
+                            />
+                            <p className="text-muted-foreground text-sm mt-1">
+                              Subir de galería
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">O</p>
+                          <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-2 mx-auto text-sm text-primary font-semibold">
+                            <Icon name="Camera" className="h-4 w-4" />
+                            Tomar foto
+                          </button>
                         </div>
                       )}
                       <input
                         ref={fileInputRef}
                         type="file"
                         accept="image/*"
+                        onChange={handleImageSelect}
+                        className="hidden"
+                      />
+                      <input
+                        ref={cameraInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
                         onChange={handleImageSelect}
                         className="hidden"
                       />
