@@ -260,15 +260,25 @@
         const fileInputRef = useRef(null);
 
         useEffect(() => {
+          // Intenta obtener la sesión al cargar para verificar la conexión
+          supabaseClient.auth.getSession().then(({ data: { session }, error }) => {
+            if (error) {
+              console.error("Error de conexión inicial con Supabase:", error);
+              toast.error("Error de conexión con Supabase.");
+            } else {
+              console.log("Conexión con Supabase exitosa. Sesión:", session);
+              setAuthenticated(!!session);
+            }
+          });
+
           fetchProducts(); // Cargar productos siempre (público)
 
-          supabaseClient.auth.onAuthStateChange((_, session) => {
-            setAuthenticated(!!session);
-            fetchProducts();
-          });
-          supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          const { data: authListener } = supabaseClient.auth.onAuthStateChange((_event, session) => {
             setAuthenticated(!!session);
           });
+          return () => {
+            authListener.subscription.unsubscribe();
+          };
         }, []);
 
         // Limpieza de memoria para previsualización de imágenes
@@ -360,13 +370,14 @@
         };
 
         const uploadImage = async (file) => {
-          const ext = file.name.split(".").pop();
+          const ext = file.name.split(".").pop() || "jpg";
           const path = `${Date.now()}.${ext}`;
           const { error } = await supabaseClient.storage
             .from("product-images")
             .upload(path, file);
           if (error) {
-            toast.error("Error subiendo imagen");
+            console.error("Error subiendo imagen:", error);
+            toast.error("Error subiendo imagen: " + error.message);
             return null;
           }
           const {
@@ -383,7 +394,13 @@
           }
           setLoading(true);
           let image_url = null;
-          if (imageFile) image_url = await uploadImage(imageFile);
+          if (imageFile) {
+            image_url = await uploadImage(imageFile);
+            if (!image_url) {
+              setLoading(false);
+              return;
+            }
+          }
 
           const productData = {
             name: form.name,
@@ -464,20 +481,20 @@
           setIsCheckingOut(true);
 
           const finalizeCheckout = (locationUrl = "") => {
-            let message = "Hola! Quiero realizar el siguiente pedido:%0A%0A";
+            let message = "Hola! Quiero realizar el siguiente pedido:\n\n";
             cart.forEach((item) => {
-              message += `- ${item.name} ($${item.price})%0A`;
+              message += `- ${item.name} ($${item.price})\n`;
             });
-            message += `%0ATotal: $${cartTotal}`;
+            message += `\nTotal: $${cartTotal}`;
 
             if (locationUrl) {
-              message += `%0A%0A📍 Ubicación GPS:%0A${locationUrl}`;
+              message += `\n\n📍 Ubicación GPS:\n${locationUrl}`;
             }
 
-            window.open(
-              `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`,
-              "_blank",
-            );
+            // Usamos encodeURIComponent para evitar errores de caracteres y location.href para evitar bloqueo de popups en móvil
+            const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+            window.location.href = url;
+
             setIsCheckingOut(false);
             setShowCart(false);
           };
